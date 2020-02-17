@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Python 2.7
 
 import datetime
 from datetime import timedelta
@@ -84,11 +85,11 @@ def fake_decimal(row_no, now_hour):
     return round(ran_num * hour_power[now_hour], 4)
 
 
-def fake_integer(row_no, max=MAX_SMALL_INT):
+def fake_integer(row_no, max1=MAX_SMALL_INT):
     if row_no % 3 == 0:
         return random.randint(1, 10)
     else:
-        return random.randint(10, max + 10)
+        return random.randint(10, max1 + 10)
 
 
 def fake_bigint(row_no):
@@ -110,7 +111,7 @@ def fake_event(row_no, ran_str_list, today, hour):
         fake_string_in_list(row_no, ["play", "start", "stop", "pause", "click", "exp", "like", "download", "dislike"]))
 
     # page_id
-    row.append(fake_integer(row_no, max=100))
+    row.append(fake_integer(row_no, max1=100))
 
     # device_id
     row.append(fake_string_by_conat([ran_str_list[0], ran_str_list[2]]))
@@ -122,7 +123,7 @@ def fake_event(row_no, ran_str_list, today, hour):
     row.append(fake_bigint(row_no))
 
     # item_type_id
-    row.append(fake_integer(row_no, max=15))
+    row.append(fake_integer(row_no, max1=15))
 
     # register_date
     _id = fake_integer(row_no)
@@ -150,10 +151,10 @@ def fake_event(row_no, ran_str_list, today, hour):
     row.append(fake_decimal(row_no, hour))
 
     # Pv_Id
-    row.append(fake_string_by_conat([ran_str_list[1], ran_str_list[3]]))
+    row.append(fake_string_by_conat(["pv_id_", ran_str_list[4], ran_str_list[1], ran_str_list[3]]))
 
     # Play_Id
-    row.append(fake_string_by_conat([ran_str_list[2], ran_str_list[0]]))
+    row.append(fake_string_by_conat(["play_id_", ran_str_list[4], ran_str_list[2], ran_str_list[0]]))
 
     # Interest_Score
     row.append(fake_decimal(row_no, hour))
@@ -181,9 +182,12 @@ def fake_one_day_data(today_dt):
     row_no = 0
     row_list_one_hour = list()
     hour = 0
+    # One data file for one hour
     while hour <= 23:
         # used to produce some unique string
-        unique_str_list = str(uuid.uuid3(uuid.NAMESPACE_URL, str(row_no + today_dt.microsecond))).split('-')
+        # tm_yday is the day of year for today_dt
+        unique_str_list = str(uuid.uuid3(uuid.NAMESPACE_URL, str(row_no) + str(today_dt.timetuple().tm_yday))
+                              ).split('-')
         row_no += 1
         row = fake_event(row_no, unique_str_list, today_dt, hour)
         row_list_one_hour.append(row)
@@ -199,9 +203,12 @@ def fake_one_day_data(today_dt):
 
 def init_argument():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dt', required=True, help="You have to specific which day of data you want to generate.")
+    parser.add_argument('--dt', required=True,
+                        help="You have to specific which day of data you want to generate. Format like : 2020-01-01")
     parser.add_argument('--path', default="temp", help="You have to specific where to locate data file.")
-    parser.add_argument('--count', default=10000, type=int, help="You have to specific how many row for each hour.")
+    parser.add_argument('--count', default=10000, type=int,
+                        help="You have to specific how many row for each hour. "
+                             "Default count for user action for one hour is 10000.")
     args = parser.parse_args()
     return args
 
