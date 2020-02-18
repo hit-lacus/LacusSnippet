@@ -1,5 +1,5 @@
 DROP TABLE IF EXISTS UserActionLog;
-CREATE TABLE IF NOT EXISTS UserActionLog (
+CREATE external TABLE IF NOT EXISTS UserActionLog (
   uid BIGINT COMMENT 'user identity',
   act_type CHAR(10) COMMENT 'user action type, such as start app, watch a video, click a button',
   page_id INT COMMENT 'which page did user click or watch',
