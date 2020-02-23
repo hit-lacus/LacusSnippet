@@ -1,0 +1,48 @@
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans-3.1.xsd">
+
+    <description>Kylin Metrics Related Configuration (System Cube)</description>
+
+    <!-- A Reservoir which don't staged metrics message at all, emit it in no time. Maybe good for debug purpose.-->
+    <bean id="instantReservoir" class="org.apache.kylin.metrics.lib.impl.InstantReservoir"/>
+
+    <bean id="kafkaSink" class="org.apache.kylin.metrics.lib.impl.kafka.KafkaSink"/>
+
+    <bean id="initMetricsManager" class="org.springframework.beans.factory.config.MethodInvokingFactoryBean">
+        <property name="targetClass" value="org.apache.kylin.metrics.MetricsManager"/>
+        <property name="targetMethod" value="initMetricsManager"/>
+        <property name="arguments">
+            <list>
+                <!--
+                                     Sink of System Cube.
+                -->
+                <ref bean="kafkaSink"/>
+
+                <!--
+                                     Bind properties for each ActiveReservoirReporter.
+                -->
+                <map key-type="org.apache.kylin.metrics.lib.ActiveReservoir" value-type="java.util.List">
+
+                    <!-- Each ActiveReservoir can have multi ReservoirReporter -->
+                    <entry key-ref="instantReservoir">
+                        <list>
+                            <bean class="org.apache.kylin.common.util.Pair">
+                                <!-- Implementation of ReservoirReporter-->
+                                <property name="first"
+                                          value="org.apache.kylin.metrics.lib.impl.kafka.KafkaReservoirReporter"/>
+                                <!-- Properties for specific ReservoirReporter-->
+                                <property name="second">
+                                    <props>
+                                        <prop key="bootstrap.servers">cdh-master:9092,cdh-worker-1:9092,cdh-worker-2:9092</prop>
+                                    </props>
+                                </property>
+                            </bean>
+                        </list>
+                    </entry>
+                </map>
+            </list>
+        </property>
+    </bean>
+</beans>
