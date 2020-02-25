@@ -120,7 +120,8 @@ def fake_event(row_no, ran_str_list, today, hour):
     row.append(fake_string_in_list(row_no, ["huawei", "iPhone", "xiaomi", "vivo", "360", "meizu"]))
 
     # item_id
-    row.append(fake_bigint(row_no))
+    tmp_id = fake_bigint(row_no)
+    row.append(tmp_id)
 
     # item_type_id
     row.append(fake_integer(row_no, max1=15))
@@ -150,11 +151,13 @@ def fake_event(row_no, ran_str_list, today, hour):
     # Play_Times
     row.append(fake_decimal(row_no, hour))
 
+    temp_str = str(row_no) + str(tmp_id)
+
     # Pv_Id
-    row.append(fake_string_by_conat(["pv_id_", ran_str_list[4], ran_str_list[1], ran_str_list[3]]))
+    row.append(fake_string_by_conat(["pv_id_", temp_str, ran_str_list[4], ran_str_list[1], ran_str_list[3]]))
 
     # Play_Id
-    row.append(fake_string_by_conat(["play_id_", ran_str_list[4], ran_str_list[2], ran_str_list[0]]))
+    row.append(fake_string_by_conat(["play_id_", temp_str, ran_str_list[4], ran_str_list[2], ran_str_list[0]]))
 
     # Interest_Score
     row.append(fake_decimal(row_no, hour))
