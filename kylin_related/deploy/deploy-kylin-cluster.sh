@@ -33,7 +33,7 @@
 ##### Please modify these config entry
 
 ## The path which we choose to deploy you component (need created manually)
-DEPLOY_PATH=/root/xiaoxiang.yu/deploy
+DEPLOY_PATH=/root/open-source/night-build/LacusSnippet/kylin_related/deploy
 
 ## THe path we choose to deploy kylin instances (need created manually).
 KYLIN_PATH=$DEPLOY_PATH/kylin
@@ -55,22 +55,23 @@ NODE_LIST=(
 ## following is their deploy path
 RECEIVER_LIST=(
 "kylin-receiver-1"
+"kylin-receiver-2"
 )
 
 ## The config entry which append to kylin.properties
 ## Please choose you own metadata url, that will be beneficial to easy storage clean up and resource isolation.
 MY_CONFIG=(
-"Kylin.metadata.url=xiaoxiang_metadata@jdbc,url=jdbc:mysql://cdh-master:3306/XiaoXiangYu,username=root,password=Kylin!2019,maxActive=10,maxIdle=10"
-"kylin.source.hive.database-for-flat-table=lacus"
-"kylin.env.zookeeper-base-path=/xiaoxiang_cluster"
-"kylin.storage.hbase.table-name-prefix=lacus_"
-"kylin.storage.hbase.namespace=lacus"
-"kylin.env.hdfs-working-dir=/kylin/xiaoxiang_cluster"
+"kylin.metadata.url=master_metadata@jdbc,url=jdbc:mysql://cdh-master:3306/NightlyBuild,username=root,password=Kylin!2019,maxActive=10,maxIdle=10"
+"kylin.source.hive.database-for-flat-table=NightlyBuild"
+"kylin.env.zookeeper-base-path=/NightlyBuild"
+"kylin.storage.hbase.table-name-prefix=nightly_"
+"kylin.storage.hbase.namespace=nightly_build"
+"kylin.env.hdfs-working-dir=/NightlyBuild"
 "kylin.stream.event.timezone=GMT+8"
 "kylin.web.timezone=GMT+8"
 "kylin.stream.hive.database-for-lambda-cube=realtime_lambda_test"
 "kylin.query.cache-enabled=false"
-"kylin.metrics.monitor-enabled=true"
+"kylin.metrics.monitor-enabled=false"
 "kylin.metrics.reporter-job-enabled=true"
 "kylin.metrics.reporter-query-enabled=true"
 "kylin.web.dashboard-enabled=true"
@@ -81,9 +82,9 @@ MY_CONFIG=(
 )
 
 ## Modify port for kylin instance
-KYLIN_ROLE_ALL_PORT_OFFSET=1935
+KYLIN_ROLE_ALL_PORT_OFFSET=935
 ## Modify port for kylin receiver
-KYLIN_RECEIVER_PORT_OFFSET=2931
+KYLIN_RECEIVER_PORT_OFFSET=936
 
 
 ##############################
@@ -110,15 +111,19 @@ function main() {
     check_args
     app_option="$1"
 
-    #=========== Cluster Level Operation ===========#
+    #=========== Cluster Level Operation [via ssh] ===========#
 
     if [ $app_option == "distribute" ]
     then
         copy_binary
 
-    elif [ $app_option == "start_kylin" ]
+    elif [ $app_option == "deploy_kylin_instance" ]
     then
-        start_kylin init
+        ssh root@cdh-master "sh -x $THIS_FILE deploy_kylin "
+
+    elif [ $app_option == "start_kylin_instance" ]
+    then
+        ssh root@cdh-master "sh -x $THIS_FILE start_kylin "
 
     elif [ $app_option == "stop_kylin" ]
     then
@@ -156,7 +161,20 @@ function main() {
             ssh root@$node "sh -x $THIS_FILE destory_receiver"
         done
 
-    #=========== Node Level Operation ===========#
+    #=========== Node Level Operation [Local] ===========#
+
+
+    elif [ $app_option == "deploy_kylin" ]
+    then
+        start_kylin deploy
+
+    elif [ $app_option == "start_kylin" ]
+    then
+        start_kylin start
+
+    elif [ $app_option == "deploy_receiver" ]
+    then
+        start_all_receivers init
 
     elif [ $app_option == "deploy_receiver" ]
     then
@@ -201,31 +219,55 @@ function copy_binary() {
 # Start a new Kylin Server
 # If a previous Kylin instance exists, force kill and destory it
 function start_kylin() {
+    export JAVA_HOME=/usr/java/jdk1.8.0_171 #NGTM
+    export PATH=$JAVA_HOME/bin:$PATH
     rm -rf $KYLIN_PATH/*.gz
     cp $ORIGINAL_PACKAGE $KYLIN_PATH/kylin.tar.gz
     cd $KYLIN_PATH
     option=$1
-    if [ $option == "init" ]
+    if [ $option == "deploy" ]
     then
+
+        ## Stop and remove previous instance
         cd kylin-all
         sh bin/kylin.sh stop
         cd ..
         rm -rf apache-kylin*bin
         rm -rf kylin-all
+
+        ## TODO(diag.sh)
+        ## Upload diag
+
+        ## Deploy new one
+        cd $KYLIN_PATH
+        binary=`ls $KYLIN_PATH/kylin.tar.gz`
+        tar zxf $binary
+        mv apache-kylin*bin kylin-all
+        cd $KYLIN_PATH/kylin-all
+        export KYLIN_HOME=`pwd`
+
+        ## Reset port
+        sh bin/kylin-port-replace-util.sh set $KYLIN_ROLE_ALL_PORT_OFFSET
+
+        ## Update config
+        update_config conf/kylin.properties
     fi
-    cd $KYLIN_PATH
-    binary=`ls $KYLIN_PATH/kylin.tar.gz`
-    tar zxf $binary
-    mv apache-kylin*bin kylin-all
-    cd kylin-all
+
+    cd $KYLIN_PATH/kylin-all
     export KYLIN_HOME=`pwd`
-    sh bin/kylin-port-replace-util.sh set $KYLIN_ROLE_ALL_PORT_OFFSET
-    update_config conf/kylin.properties
+
+
+    # As far as I see, jenkins will kill child process which create by him after job finished.
+    # I was trying to avoid such things happend, but it looks not works.
+    # At the end, I start kylin via ssh (in remote execute). So jenkins can not kill remote processes.
+    # LGTM.
+    # export KYLIN_EXTRA_START_OPTS=" -Dhudson.util.ProcessTree.disable=true"
+    # echo 'export KYLIN_EXTRA_START_OPTS=" -Dhudson.util.ProcessTree.disable=true $KYLIN_EXTRA_START_OPTS"' >> conf/setenv.sh
+
     sh bin/kylin.sh start
     sleep 30
     jps -mlv | grep $DEPLOY_PATH
     echo "Done start kylin server."
-    cd $KYLIN_PATH/kylin-all
 }
 
 function stop_kylin() {
@@ -243,6 +285,8 @@ function stop_kylin() {
 function start_all_receivers() {
     option=$1
     cd $KYLIN_PATH
+    export JAVA_HOME=/usr/java/jdk1.8.0_171 #NGTM
+    export PATH=$JAVA_HOME/bin:$PATH
     kill_kylin_process
     if [ $option == "init" ]
     then
@@ -294,6 +338,7 @@ function start_all_receivers() {
     do
         echo "Go to "$instance
         cd $instance
+        export PATH=/usr/java/jdk1.8.0_171/bin:$PATH
         # start streaming receiver
         sh bin/kylin.sh streaming start
         cd ..
@@ -333,10 +378,11 @@ function update_config() {
     done
 }
 
-## Find all kylin process created by me in this node and send terminate signal to it
+## Find all kylin receivers process created by me in this node and send terminate signal to it
+## "created by me" means it Working Dir contains KYLIN_PATH
 function kill_kylin_process() {
     temp_file=.your_kylin_process
-    jps -mlv | grep $DEPLOY_PATH > ${temp_file}
+    jps -mlv | grep $DEPLOY_PATH | grep StreamingReceiver > ${temp_file}
     cat ${temp_file}
     awk  '{print$1;}' ${temp_file} | xargs -I {} kill {}
     rm -rf ${temp_file}
@@ -355,17 +401,19 @@ function print_manual() {
     Usage:
 1. distribute
     distribute the latest binary from local to all worker nodes
-2. start_kylin
-    start kylin server at current node, if prevoius kylin instance still, kill and remove it
-3. stop_kylin
+2. deploy_kylin_instance
+    deploy and start kylin server at current node, if prevoius kylin instance still, kill and remove it
+3. start_kylin_instance
+    start kylin server at current node
+4. stop_kylin
     stop kylin server at current node, but do not remove it
-4. deploy_all_receiver
+5. deploy_all_receiver
     remove and kill all existed receiver process, deploy and start new instance at all worker node
-5. start_all_receiver
+6. start_all_receiver
     start reciever at all worker node(make sure these receiver have already be deployed)
-6. stop_all_receiver
+7. stop_all_receiver
     kill receiver at all worker node
-7. destory_all_receiver
+8. destory_all_receiver
     kill and delete receiver at all worker node
 """
 }
